@@ -18,11 +18,165 @@
 
 using namespace std;
 
-bool serverSetup(int &sockfd, char hoststring, char portstring)
+bool serverSetup(int &sockfd, char *hoststring, char *portstring)
 {
-  
+  //variable that will be filled with data
+  struct addrinfo *res, *pInfo;
+
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE;
+
+  int addrinfo_status = getaddrinfo(hoststring, portstring, &hints, &res);
+  if(addrinfo_status != 0)
+  {
+    printf("\nERROR: getaddrinfo Failed\n");
+    printf("Returned: %d\n", addrinfo_status);
+    return false;
+  }
+
+  #ifdef DEBUG
+  printf("getaddrinfo Succeded!\n");
+  #endif
+
+  for(pInfo = res; pInfo != NULL; pInfo = pInfo->ai_next)
+  {
+    sockfd = socket(pInfo->ai_family, pInfo->ai_socktype, pInfo->ai_protocol);
+    if(sockfd != -1)
+    {
+      break;
+    }
+  }
+
+  if(sockfd == -1)
+  {
+    printf("\nERROR: Socket creation Failed\n");
+    printf("Returned: %d\n", sockfd);
+    return false;
+  }
+
+  #ifdef DEBUG
+  printf("Socket creation Succeded!\n");
+  #endif
+
+  int opt = 1;
+  setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+  int bind_status = bind(sockfd, pInfo->ai_addr, pInfo->ai_addrlen);
+  if(bind_status == -1)
+  {
+    printf("\nERROR: Bind Failed\n");
+    printf("Returned: %d\n", bind_status);
+    close(sockfd);
+    return false;
+  }
+
+  #ifdef DEBUG
+  printf("Bind Succeded!\n");
+  #endif
+
+  int listen_status = listen(sockfd, SOMAXCONN);
+  if(listen_status == -1)
+  {
+    printf("\nERROR: Listen Failed\n");
+    printf("Returned: %d\n", listen_status);
+    close(sockfd);
+    return false;
+  }
+
+  #ifdef DEBUG
+  printf("Listen Succeded!\n");
+  #endif
+
+  freeaddrinfo(res);
+  return true;
 }
 
+ssize_t send_helper(int sockfd, const char* send_buffer)
+{
+  ssize_t bytes_sent = send(sockfd, send_buffer, strlen(send_buffer), 0);
+
+  #ifdef DEBUG
+  printf("\nBytes sent: %ld\n", bytes_sent);
+  printf("SERVER SENT:\n%s\n", send_buffer);
+  #endif
+
+  return bytes_sent;
+}
+
+ssize_t recv_helper(int sockfd, char* recv_buffer, size_t bufsize)
+{
+  ssize_t bytes_recieved = recv(sockfd, recv_buffer, bufsize - 1, 0);
+  if(bytes_recieved > 0)
+  {
+    recv_buffer[bytes_recieved] = '\0';
+  }
+
+  #ifdef DEBUG
+  printf("\nBytes recieved: %ld\n", bytes_recieved);
+  printf("CLIENT RESPONSE:\n%s", recv_buffer);
+  #endif
+  
+  return bytes_recieved;
+}
+
+void case_text(int clientfd)
+{
+  char recv_buffer[1024];
+  char send_buffer[] = "add 4 5\n";
+  send_helper(clientfd, send_buffer);
+  int bytes_recieved = recv_helper(clientfd, recv_buffer, sizeof(recv_buffer));
+  if(bytes_recieved == -1)
+  {
+    printf("ERROR: MESSAGE LOST (TIMEOUT)\n");
+    return;
+  }
+
+  if(atoi(recv_buffer) == 9)
+  {
+    char send_buffer[] = "OK\n";
+    send_helper(clientfd, send_buffer);
+  }
+  else
+  {
+    char send_buffer[] = "NOT OK\n";
+    send_helper(clientfd, send_buffer);
+  }
+}
+
+void case_binary(int clientfd)
+{
+  //code
+}
+
+void handleClient(int clientfd)
+{
+  char recv_buffer[1024];
+  char send_buffer[] = "TEXT TCP 1.1\nBINARY TCP 1.1\n\n";
+  send_helper(clientfd, send_buffer);
+  int bytes_recieved = recv_helper(clientfd, recv_buffer, sizeof(recv_buffer));
+  if(bytes_recieved == -1)
+  {
+    printf("ERROR: MESSAGE LOST (TIMEOUT)\n");
+    return;
+  }
+
+  if(strstr(recv_buffer, "TEXT TCP 1.1") != NULL)
+  {
+    case_text(clientfd);
+  }
+  else if(strstr(recv_buffer, "BINARY TCP 1.1") != NULL)
+  {
+    case_binary(clientfd);
+  }
+  else
+  {
+    printf("ERROR: MISSMATCH PROTOCOL\n");
+    return;
+  }
+}
 
 int main(int argc, char *argv[]){
   if (argc < 2) {
@@ -58,81 +212,29 @@ int main(int argc, char *argv[]){
   printf("TCP server on: %s:%s\n", hoststring,portstring);
 
   int sockfd;
-
-  //variable that will be filled with data
-  struct addrinfo *res, *pInfo;
-
-  struct addrinfo hints;
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE;
-
-  int addrinfo_status = getaddrinfo(hoststring, portstring, &hints, &res);
-  if(addrinfo_status != 0)
+  bool setup_status = serverSetup(sockfd, hoststring, portstring);
+  if(!setup_status)
   {
-    printf("\nERROR: getaddrinfo Failed\n");
-    printf("Returned: %d\n", addrinfo_status);
     return EXIT_FAILURE;
   }
 
-  #ifdef DEBUG
-  printf("getaddrinfo Succeded!\n");
-  #endif
-
-  for(pInfo = res; pInfo != NULL; pInfo = pInfo->ai_next)
+  while(1)
   {
-    sockfd = socket(pInfo->ai_family, pInfo->ai_socktype, pInfo->ai_protocol);
-    if(sockfd != -1)
+    struct sockaddr_storage client_addr;
+    socklen_t addr_size = sizeof(client_addr);
+
+    int clientfd = accept(sockfd, (struct sockaddr*)&client_addr, &addr_size);
+    if(clientfd == -1)
     {
-      break;
+      printf("\nERROR: clientfd Failed\n");
+      printf("Returned: %d\n", clientfd);
+      continue;
     }
-    #ifdef DEBUG
-    printf("Socket retry");
-    #endif
+
+    handleClient(clientfd);
+    close(clientfd);
   }
-
-  if(sockfd == -1)
-  {
-    printf("\nERROR: Socket creation Failed\n");
-    printf("Returned: %d\n", sockfd);
-    return EXIT_FAILURE;
-  }
-
-  #ifdef DEBUG
-  printf("Socket creation Succeded!\n");
-  #endif
-
-  int opt = 1;
-  setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-  int bind_status = bind(sockfd, pInfo->ai_addr, pInfo->ai_addrlen);
-  if(bind_status == -1)
-  {
-    printf("\nERROR: Bind Failed\n");
-    printf("Returned: %d\n", bind_status);
-    close(sockfd);
-    return EXIT_FAILURE;
-  }
-
-  #ifdef DEBUG
-  printf("Bind Succeded!\n");
-  #endif
-
-  int listen_status = listen(sockfd, SOMAXCONN);
-  if(listen_status == -1)
-  {
-    printf("\nERROR: Listen Failed\n");
-    printf("Returned: %d\n", listen_status);
-    close(sockfd);
-    return EXIT_FAILURE;
-  }
-
-  #ifdef DEBUG
-  printf("Listen Succeded!\n");
-  #endif
-
-  freeaddrinfo(res);
+  
   close(sockfd);
   return 0;
 }
