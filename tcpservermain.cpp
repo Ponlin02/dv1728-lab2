@@ -94,6 +94,35 @@ bool serverSetup(int &sockfd, char *hoststring, char *portstring)
   return true;
 }
 
+int client_calc(const char* src)
+{
+  char operation[10];
+  int n1;
+  int n2;
+  int result;
+
+  sscanf(src, "%s %d %d", operation, &n1, &n2);
+
+  if(strcmp(operation, "add") == 0)
+  {
+    result = n1 + n2;
+  }
+  else if(strcmp(operation, "sub") == 0)
+  {
+    result = n1 - n2;
+  }
+  else if(strcmp(operation, "mul") == 0)
+  {
+    result = n1 * n2;
+  }
+  else if(strcmp(operation, "div") == 0)
+  {
+    result = n1 / n2;
+  }
+
+  return result;
+}
+
 ssize_t send_helper(int sockfd, const char* send_buffer)
 {
   ssize_t bytes_sent = send(sockfd, send_buffer, strlen(send_buffer), 0);
@@ -125,7 +154,9 @@ ssize_t recv_helper(int sockfd, char* recv_buffer, size_t bufsize)
 void case_text(int clientfd)
 {
   char recv_buffer[1024];
-  char send_buffer[] = "add 4 5\n";
+  char send_buffer[10];
+  initCalcLib();
+  sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt(), randomInt());
   send_helper(clientfd, send_buffer);
   int bytes_recieved = recv_helper(clientfd, recv_buffer, sizeof(recv_buffer));
   if(bytes_recieved == -1)
@@ -134,15 +165,15 @@ void case_text(int clientfd)
     return;
   }
 
-  if(atoi(recv_buffer) == 9)
+  if(atoi(recv_buffer) == client_calc(send_buffer))
   {
-    char send_buffer[] = "OK\n";
-    send_helper(clientfd, send_buffer);
+    char send_buffer2[] = "OK\n";
+    send_helper(clientfd, send_buffer2);
   }
   else
   {
-    char send_buffer[] = "NOT OK\n";
-    send_helper(clientfd, send_buffer);
+    char send_buffer2[] = "NOT OK\n";
+    send_helper(clientfd, send_buffer2);
   }
 }
 
