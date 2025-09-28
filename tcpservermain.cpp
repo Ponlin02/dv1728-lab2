@@ -123,6 +123,31 @@ int client_calc(const char* src)
   return result;
 }
 
+uint32_t client_calc(uint32_t operation, uint32_t n1, uint32_t n2)
+{
+  if(operation == 1)
+  {
+    return n1 + n2;
+  }
+  else if(operation == 2)
+  {
+    return n1 - n2;
+  }
+  else if(operation == 3)
+  {
+    return n1 * n2;
+  }
+  else if(operation == 4)
+  {
+    return n1 / n2;
+  }
+  else
+  {
+    printf("ERROR: Incorrect use of client_calc");
+    return -1;
+  }
+}
+
 ssize_t send_helper(int sockfd, const char* send_buffer)
 {
   ssize_t bytes_sent = send(sockfd, send_buffer, strlen(send_buffer), 0);
@@ -156,7 +181,7 @@ void case_text(int clientfd)
   char recv_buffer[1024];
   char send_buffer[10];
   initCalcLib();
-  sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt(), randomInt());
+  sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
   send_helper(clientfd, send_buffer);
   int bytes_recieved = recv_helper(clientfd, recv_buffer, sizeof(recv_buffer));
   if(bytes_recieved == -1)
@@ -179,7 +204,75 @@ void case_text(int clientfd)
 
 void case_binary(int clientfd)
 {
-  //code
+  initCalcLib();
+  uint32_t operation = (randomInt() % 4) + 1;
+  uint32_t v1 = randomInt();
+  uint32_t v2 = randomInt() + 1;
+  int32_t result = client_calc(operation, v1, v2);
+
+  calcMessage msg;
+  msg.type = htons(2);
+  msg.message = htonl(2);
+  msg.protocol = htons(6);
+  msg.major_version = htons(1);
+  msg.minor_version = htons(1);
+
+  calcProtocol pro;
+  pro.type = htons(1);
+  pro.major_version = htons(1);
+  pro.minor_version = htons(1);
+  pro.id = htonl(69);
+  pro.arith = htonl(operation);
+  pro.inValue1 = htonl(v1);
+  pro.inValue2 = htonl(v2);
+  pro.inResult = htonl(0);
+
+  ssize_t bytes_sent = send(clientfd, &pro, sizeof(pro), 0);
+  ssize_t bytes_recieved = recv(clientfd, &pro, sizeof(pro), 0);
+
+  #ifdef DEBUG
+  printf("\nBytes sent: %ld\n", bytes_sent);
+  printf("bytes recieved %ld\n", bytes_recieved);
+  #endif
+
+  if(bytes_recieved == 26)
+  {
+    pro.type = ntohs(pro.type);
+    pro.major_version = ntohs(pro.major_version);
+    pro.minor_version = ntohs(pro.minor_version);
+    //pro.id = ntohl(pro.id);
+    pro.inResult = ntohl(pro.inResult);
+
+    if(pro.type == 2 &&
+      pro.major_version == 1 &&
+      pro.minor_version == 1 &&
+      pro.inResult == result)
+    {
+      msg.message = htonl(1);
+    }
+
+    #ifdef DEBUG
+    printf("inResult: %d\n", pro.inResult);
+    printf("real result: %d\n", result);
+    #endif
+  }
+  else if(bytes_recieved == -1)
+  {
+    printf("ERROR: MESSAGE LOST (TIMEOUT)\n");
+    return;
+  }
+  else
+  {
+    printf("NOT OK\n");
+    printf("ERROR: WRONG SIZE OR INCORRECT PROTOCOL\n");
+    return;
+  }
+
+  ssize_t bytes_sent2 = send(clientfd, &msg, sizeof(msg), 0);
+
+  #ifdef DEBUG
+  printf("\nBytes sent: %ld\n", bytes_sent2);
+  #endif
 }
 
 void handleClient(int clientfd)
@@ -261,6 +354,12 @@ int main(int argc, char *argv[]){
       printf("Returned: %d\n", clientfd);
       continue;
     }
+
+    //Set options for the client socket
+    timeval tv;
+    tv.tv_sec = 5;
+    tv.tv_usec = 0;
+    setsockopt(clientfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     handleClient(clientfd);
     close(clientfd);
