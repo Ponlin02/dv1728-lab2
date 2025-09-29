@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <netdb.h>
+#include <signal.h>
 #include "protocol.h"
 
 // Included to get the support library
@@ -342,10 +343,14 @@ int main(int argc, char *argv[]){
     return EXIT_FAILURE;
   }
 
+  //zombie child cleanup
+  signal(SIGCHLD, SIG_IGN);
+
   while(1)
   {
     struct sockaddr_storage client_addr;
     socklen_t addr_size = sizeof(client_addr);
+    int pid;
 
     int clientfd = accept(sockfd, (struct sockaddr*)&client_addr, &addr_size);
     if(clientfd == -1)
@@ -361,8 +366,26 @@ int main(int argc, char *argv[]){
     tv.tv_usec = 0;
     setsockopt(clientfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    handleClient(clientfd);
-    close(clientfd);
+    pid = fork();
+    if(pid == 0)
+    {
+      //child process
+      close(sockfd);
+      handleClient(clientfd);
+      close(clientfd);
+      _exit(0);
+    }
+    else if(pid > 0)
+    {
+      //parent process
+      close(clientfd);
+    }
+    else
+    {
+      close(sockfd);
+      close(clientfd);
+      printf("ERROR: fork failed\n");
+    }
   }
   
   close(sockfd);
