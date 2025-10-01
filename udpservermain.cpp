@@ -213,7 +213,7 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
   else if(bytes_recieved == 12) //case binary
   {
     calcMessage msg;
-    memcpy(&msg, buf, 12);
+    memcpy(&msg, buf, bytes_recieved);
     msg.type = ntohs(msg.type);
     msg.protocol = ntohs(msg.protocol);
     msg.major_version = ntohs(msg.major_version);
@@ -289,8 +289,10 @@ void text_response(int sockfd, struct clientInfo *table, int index, char* buf, i
     strcpy(send_buffer, "NOT OK\n");
   }
 
+  #ifdef DEBUG
   printf("Table result: %d\n", table[index].result);
   printf("Client result: %d\n", atoi(buf));
+  #endif
 
   sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
   table[index].active = false;
@@ -299,7 +301,37 @@ void text_response(int sockfd, struct clientInfo *table, int index, char* buf, i
 
 void binary_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
-  //code
+  if(bytes_recieved != 26)
+  {
+    printf("NOT OK\n");
+    printf("ERROR: WRONG SIZE OR INCORRECT PROTOCOL\n");
+    table[index].active = false;
+    return;
+  }
+
+  calcMessage msg;
+  msg.type = htons(2);
+  msg.message = htonl(0);
+  msg.protocol = htons(17);
+  msg.major_version = htons(1);
+  msg.minor_version = htons(1);
+
+  calcProtocol pro;
+  memcpy(&pro, buf, bytes_recieved);
+  int clientResult = ntohl(pro.inResult);
+  
+  if(table[index].result == clientResult)
+  {
+    msg.message = ntohl(1);
+  }
+  else
+  {
+    msg.message = ntohl(2);
+  }
+
+  sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+  table[index].active = false;
+  return;
 }
 
 int main(int argc, char *argv[]){
