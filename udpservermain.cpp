@@ -17,7 +17,7 @@
 // Enable if you want debugging to be printed, see examble below.
 // Alternative, pass CFLAGS=-DDEBUG to make, make CFLAGS=-DDEBUG
 #define DEBUG
-#define MAXCLIENTS 10
+#define MAXCLIENTS 100
 
 using namespace std;
 
@@ -26,9 +26,66 @@ struct clientInfo
   struct sockaddr_storage addr;
   socklen_t addr_len;
   time_t last_seen;
-
+  int step;
+  int result;
+  bool use_text;
+  bool use_binary;
   bool active;
 };
+
+int client_calc(const char* src)
+{
+  char operation[10];
+  int n1;
+  int n2;
+  int result;
+
+  sscanf(src, "%s %d %d", operation, &n1, &n2);
+
+  if(strcmp(operation, "add") == 0)
+  {
+    result = n1 + n2;
+  }
+  else if(strcmp(operation, "sub") == 0)
+  {
+    result = n1 - n2;
+  }
+  else if(strcmp(operation, "mul") == 0)
+  {
+    result = n1 * n2;
+  }
+  else if(strcmp(operation, "div") == 0)
+  {
+    result = n1 / n2;
+  }
+
+  return result;
+}
+
+uint32_t client_calc(uint32_t operation, uint32_t n1, uint32_t n2)
+{
+  if(operation == 1)
+  {
+    return n1 + n2;
+  }
+  else if(operation == 2)
+  {
+    return n1 - n2;
+  }
+  else if(operation == 3)
+  {
+    return n1 * n2;
+  }
+  else if(operation == 4)
+  {
+    return n1 / n2;
+  }
+  else
+  {
+    printf("ERROR: Incorrect use of client_calc");
+    return -1;
+  }
+}
 
 //Function that tries to find a client if it exists in the table, 
 //if not try to put it in the table. Returns index or "-1" for ERROR
@@ -53,7 +110,10 @@ int client_lockup(struct clientInfo *table, struct sockaddr_storage *addr, sockl
       table[i].addr = *addr;
       table[i].addr_len = addr_len;
       table[i].last_seen = time(NULL);
-
+      table[i].step = 0;
+      table[i].result = 0;
+      table[i].use_binary = false;
+      table[i].use_text = false;
       table[i].active = true;
       return i; //client index
     }
@@ -126,6 +186,96 @@ bool serverSetup(int &sockfd, char *hoststring, char *portstring)
   return true;
 }
 
+void processInitialData(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
+{
+  initCalcLib();
+  if(strstr(buf, "TEXT UDP 1.1") != NULL) //case text
+  {
+    char send_buffer[10];
+    sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
+    ssize_t bytes_sent = sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+
+    #ifdef DEBUG
+    printf("\nBytes recieved: %d\n", bytes_recieved);
+    printf("CLIENT RESPONSE:\n%s", buf);
+    #endif
+
+    #ifdef DEBUG
+    printf("\nBytes sent: %ld\n", bytes_sent);
+    printf("SERVER SENT:\n%s\n", send_buffer);
+    #endif
+
+    table[index].step = 1;
+    table[index].result = client_calc(buf);
+    table[index].use_text = true;
+    return;
+  }
+  else if(bytes_recieved == 12) //case binary
+  {
+    calcMessage msg;
+    memcpy(&msg, buf, 12);
+    msg.type = ntohs(msg.type);
+    msg.protocol = ntohs(msg.protocol);
+    msg.major_version = ntohs(msg.major_version);
+    msg.minor_version = ntohs(msg.minor_version);
+    
+    if(!(msg.type == 22 && 
+      msg.protocol == 17 && 
+      msg.major_version == 1 && 
+      msg.minor_version == 1))
+    {
+      printf("NOT OK\n");
+      printf("ERROR: INVALID MESSAGE\n");
+      table[index].active = false;
+
+      #ifdef DEBUG
+      printf("type: %d\n", msg.type);
+      printf("protocol: %d\n", msg.protocol);
+      printf("major: %d\n", msg.major_version);
+      printf("minor: %d\n", msg.minor_version);
+      #endif
+      return;
+    }
+
+    uint32_t operation = (randomInt() % 4) + 1;
+    uint32_t v1 = randomInt();
+    uint32_t v2 = randomInt() + 1;
+
+    calcProtocol pro;
+    pro.type = htons(1);
+    pro.major_version = htons(1);
+    pro.minor_version = htons(1);
+    pro.id = htonl(69);
+    pro.arith = htonl(operation);
+    pro.inValue1 = htonl(v1);
+    pro.inValue2 = htonl(v2);
+    pro.inResult = htonl(0);
+
+    ssize_t bytes_sent = sendto(sockfd, &pro, sizeof(pro), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+
+    #ifdef DEBUG
+    printf("\nBytes recieved: %d\n", bytes_recieved);
+    printf("CLIENT RESPONSE:\n%s", buf);
+    #endif
+
+    #ifdef DEBUG
+    printf("\nBytes sent: %ld\n", bytes_sent);
+    #endif
+
+    table[index].step = 1;
+    table[index].result = client_calc(operation, v1, v2);
+    table[index].use_binary = true;
+    return;
+  }
+  else //Error
+  {
+    printf("NOT OK\n");
+    printf("ERROR: WRONG SIZE OR INCORRECT PROTOCOL\n");
+    table[index].active = false;
+    return;
+  }
+}
+
 int main(int argc, char *argv[]){
   if (argc < 2) {
     fprintf(stderr, "Usage: %s protocol://server:port/path.\n", argv[0]);
@@ -168,16 +318,37 @@ int main(int argc, char *argv[]){
   }
 
   struct clientInfo client_table[MAXCLIENTS];
+  memset(client_table, 0, sizeof(client_table));
+  struct timeval tv;
 
   while(1)
   {
+    time_t now = time(NULL);
+    for(int i = 0; i < MAXCLIENTS; i++)
+    {
+      if(client_table[i].active && (now - client_table[i].last_seen > 10))
+      {
+        #ifdef DEBUG
+        printf("Client timeout (slot: %d)\n", i);
+        #endif
+        client_table[i].active = false;
+      }
+    }
+
     FD_ZERO(&readfds);
     FD_SET(sockfd, &readfds);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
 
-    int select_status = select(sockfd + 1, &readfds, NULL, NULL, NULL);
+    int select_status = select(sockfd + 1, &readfds, NULL, NULL, &tv);
     if(select_status == -1)
     {
       printf("ERROR: Select error\n");
+      continue;
+    }
+    else if(select_status == 0)
+    {
+      //rerun loop to check for timeouts
       continue;
     }
 
@@ -204,8 +375,19 @@ int main(int argc, char *argv[]){
 
       #ifdef DEBUG
       printf("Client Index = %d\n", index);
-      //printf("Step: %d\n", );
+      printf("Step: %d\n", client_table[index].step);
       #endif
+
+      client_table[index].last_seen = time(NULL);
+
+      if(client_table[index].step == 0)
+      {
+        processInitialData(sockfd, client_table, index, recv_buffer, bytes_recieved);
+      }
+      else if(client_table[index].step == 1)
+      {
+        //code
+      }
     }
   }
 
