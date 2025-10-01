@@ -188,14 +188,14 @@ bool serverSetup(int &sockfd, char *hoststring, char *portstring)
 
 void processInitialData(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
-  initCalcLib();
   if(strstr(buf, "TEXT UDP 1.1") != NULL) //case text
   {
+    buf[bytes_recieved] = '\0';
     char send_buffer[10];
     sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
     ssize_t bytes_sent = sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
 
-    #ifdef DEBUG
+    /*#ifdef DEBUG
     printf("\nBytes recieved: %d\n", bytes_recieved);
     printf("CLIENT RESPONSE:\n%s", buf);
     #endif
@@ -203,10 +203,10 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
     #ifdef DEBUG
     printf("\nBytes sent: %ld\n", bytes_sent);
     printf("SERVER SENT:\n%s\n", send_buffer);
-    #endif
+    #endif*/
 
     table[index].step = 1;
-    table[index].result = client_calc(buf);
+    table[index].result = client_calc(send_buffer);
     table[index].use_text = true;
     return;
   }
@@ -253,14 +253,14 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
 
     ssize_t bytes_sent = sendto(sockfd, &pro, sizeof(pro), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
 
-    #ifdef DEBUG
+    /*#ifdef DEBUG
     printf("\nBytes recieved: %d\n", bytes_recieved);
     printf("CLIENT RESPONSE:\n%s", buf);
     #endif
 
     #ifdef DEBUG
     printf("\nBytes sent: %ld\n", bytes_sent);
-    #endif
+    #endif*/
 
     table[index].step = 1;
     table[index].result = client_calc(operation, v1, v2);
@@ -274,6 +274,32 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
     table[index].active = false;
     return;
   }
+}
+
+void text_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
+{
+  buf[bytes_recieved] = '\0';
+  char send_buffer[10];
+  if(table[index].result == atoi(buf))
+  {
+    strcpy(send_buffer, "OK\n");
+  }
+  else
+  {
+    strcpy(send_buffer, "NOT OK\n");
+  }
+
+  printf("Table result: %d\n", table[index].result);
+  printf("Client result: %d\n", atoi(buf));
+
+  sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+  table[index].active = false;
+  return;
+}
+
+void binary_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
+{
+  //code
 }
 
 int main(int argc, char *argv[]){
@@ -320,6 +346,7 @@ int main(int argc, char *argv[]){
   struct clientInfo client_table[MAXCLIENTS];
   memset(client_table, 0, sizeof(client_table));
   struct timeval tv;
+  initCalcLib();
 
   while(1)
   {
@@ -386,7 +413,26 @@ int main(int argc, char *argv[]){
       }
       else if(client_table[index].step == 1)
       {
-        //code
+        if(client_table[index].use_binary && client_table[index].use_text)
+        {
+          printf("ERROR: Cant use text and binary\n");
+          client_table[index].active = false;
+          continue;
+        }
+        else if(client_table[index].use_text)
+        {
+          text_response(sockfd, client_table, index, recv_buffer, bytes_recieved);
+        }
+        else if(client_table[index].use_binary)
+        {
+          binary_response(sockfd, client_table, index, recv_buffer, bytes_recieved);
+        }
+        else
+        {
+          printf("ERROR: Client should use text or binary\n");
+          client_table[index].active = false;
+          continue;
+        }
       }
     }
   }
