@@ -17,7 +17,7 @@
 // Enable if you want debugging to be printed, see examble below.
 // Alternative, pass CFLAGS=-DDEBUG to make, make CFLAGS=-DDEBUG
 #define DEBUG
-#define MAXCLIENTS 200
+#define MAXCLIENTS 100
 
 using namespace std;
 
@@ -322,11 +322,11 @@ void binary_response(int sockfd, struct clientInfo *table, int index, char* buf,
   
   if(table[index].result == clientResult)
   {
-    msg.message = ntohl(1);
+    msg.message = htonl(1);
   }
   else
   {
-    msg.message = ntohl(2);
+    msg.message = htonl(2);
   }
 
   sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
@@ -418,8 +418,7 @@ int main(int argc, char *argv[]){
       socklen_t addr_len = sizeof(client_addr);
 
       int bytes_recieved = recvfrom(sockfd, recv_buffer, sizeof(recv_buffer) - 1, 0, (struct sockaddr*)&client_addr, &addr_len);
-      recv_buffer[bytes_recieved] = '\0';
-      if(select_status == -1)
+      if(bytes_recieved == -1)
       {
         printf("ERROR: Recieve from error\n");
         continue;
@@ -465,6 +464,8 @@ int main(int argc, char *argv[]){
           client_table[index].active = false;
           continue;
         }
+
+        memset(&client_table[index], 0, sizeof(client_table[index]));
       }
     }
   }
