@@ -16,8 +16,8 @@
 
 // Enable if you want debugging to be printed, see examble below.
 // Alternative, pass CFLAGS=-DDEBUG to make, make CFLAGS=-DDEBUG
-//#define DEBUG
-#define MAXCLIENTS 1000
+#define DEBUG
+#define MAXCLIENTS 200
 
 using namespace std;
 
@@ -210,10 +210,10 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
     table[index].use_text = true;
     return;
   }
-  else if(bytes_recieved == 12) //case binary
+  else if(bytes_recieved == sizeof(calcMessage)) //case binary
   {
     calcMessage msg;
-    memcpy(&msg, buf, bytes_recieved);
+    memcpy(&msg, buf, sizeof(calcMessage));
     msg.type = ntohs(msg.type);
     msg.protocol = ntohs(msg.protocol);
     msg.major_version = ntohs(msg.major_version);
@@ -278,7 +278,7 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
 
 void text_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
-  buf[bytes_recieved] = '\0';
+  //buf[bytes_recieved] = '\0';
   char send_buffer[10];
   if(table[index].result == atoi(buf))
   {
@@ -290,7 +290,7 @@ void text_response(int sockfd, struct clientInfo *table, int index, char* buf, i
   }
 
   #ifdef DEBUG
-  printf("Table result: %d\n", table[index].result);
+  //printf("Table result: %d\n", table[index].result);
   printf("Client result: %d\n", atoi(buf));
   #endif
 
@@ -301,7 +301,7 @@ void text_response(int sockfd, struct clientInfo *table, int index, char* buf, i
 
 void binary_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
-  if(bytes_recieved != 26)
+  if(bytes_recieved != sizeof(calcProtocol))
   {
     printf("NOT OK\n");
     printf("ERROR: WRONG SIZE OR INCORRECT PROTOCOL\n");
@@ -317,7 +317,7 @@ void binary_response(int sockfd, struct clientInfo *table, int index, char* buf,
   msg.minor_version = htons(1);
 
   calcProtocol pro;
-  memcpy(&pro, buf, bytes_recieved);
+  memcpy(&pro, buf, sizeof(calcProtocol));
   int clientResult = ntohl(pro.inResult);
   
   if(table[index].result == clientResult)
