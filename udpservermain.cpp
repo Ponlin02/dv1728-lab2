@@ -107,7 +107,9 @@ int client_lockup(struct clientInfo *table, struct sockaddr_storage *addr, sockl
   {
     if(!table[i].active)
     {
-      table[i].addr = *addr;
+      memset(&table[i], 0, sizeof(clientInfo));
+      //table[i].addr = *addr;
+      memcpy(&table[i].addr, addr, addr_len);
       table[i].addr_len = addr_len;
       table[i].last_seen = time(NULL);
       table[i].step = 0;
@@ -194,6 +196,12 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
     char send_buffer[10];
     sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
     ssize_t bytes_sent = sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+    if(bytes_sent == -1)
+    {
+      printf("ERROR: Send to error\n");
+      table[index].active = false;
+      return;
+    }
 
     /*#ifdef DEBUG
     printf("\nBytes recieved: %d\n", bytes_recieved);
@@ -242,6 +250,7 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
     uint32_t v2 = randomInt() + 1;
 
     calcProtocol pro;
+    memset(&pro, 0, sizeof(calcProtocol));
     pro.type = htons(1);
     pro.major_version = htons(1);
     pro.minor_version = htons(1);
@@ -252,6 +261,12 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
     pro.inResult = htonl(0);
 
     ssize_t bytes_sent = sendto(sockfd, &pro, sizeof(pro), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+    if(bytes_sent == -1)
+    {
+      printf("ERROR: Send to error\n");
+      table[index].active = false;
+      return;
+    }
 
     /*#ifdef DEBUG
     printf("\nBytes recieved: %d\n", bytes_recieved);
@@ -310,6 +325,7 @@ void binary_response(int sockfd, struct clientInfo *table, int index, char* buf,
   }
 
   calcMessage msg;
+  memset(&msg, 0, sizeof(calcMessage));
   msg.type = htons(2);
   msg.message = htonl(0);
   msg.protocol = htons(17);
@@ -329,7 +345,12 @@ void binary_response(int sockfd, struct clientInfo *table, int index, char* buf,
     msg.message = htonl(2);
   }
 
-  sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+  ssize_t bytes_sent = sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+  if(bytes_sent == -1)
+  {
+    printf("ERROR: Send to error\n");
+  }
+
   table[index].active = false;
   return;
 }
@@ -464,8 +485,6 @@ int main(int argc, char *argv[]){
           client_table[index].active = false;
           continue;
         }
-
-        memset(&client_table[index], 0, sizeof(client_table[index]));
       }
     }
   }
