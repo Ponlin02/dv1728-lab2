@@ -206,6 +206,7 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
   {
     //buf[bytes_recieved] = '\0';
     char send_buffer[128];
+    send_buffer[0] = '\0';
     sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
     ssize_t bytes_sent = sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
     if(bytes_sent == -1)
@@ -309,18 +310,19 @@ void text_response(int sockfd, struct clientInfo *table, int index, char* buf, i
 {
   //buf[bytes_recieved] = '\0';
   char send_buffer[128];
+  send_buffer[0] = '\0';
   if(table[index].result == atoi(buf))
   {
-    strcpy(send_buffer, "OK\n");
+    sprintf(send_buffer, "%s", "OK\n");
   }
   else
   {
-    strcpy(send_buffer, "NOT OK\n");
+    sprintf(send_buffer, "%s", "NOT OK\n");
   }
 
   #ifdef DEBUG
   //printf("Table result: %d\n", table[index].result);
-  printf("Client result: %d\n", atoi(buf));
+  //printf("Client result: %d\n", atoi(buf));
   #endif
 
   sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
