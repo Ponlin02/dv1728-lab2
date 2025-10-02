@@ -204,8 +204,8 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
 {
   if(strstr(buf, "TEXT UDP 1.1") != NULL) //case text
   {
-    buf[bytes_recieved] = '\0';
-    char send_buffer[10];
+    //buf[bytes_recieved] = '\0';
+    char send_buffer[128];
     sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
     ssize_t bytes_sent = sendto(sockfd, send_buffer, strlen(send_buffer), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
     if(bytes_sent == -1)
@@ -308,7 +308,7 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
 void text_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
   //buf[bytes_recieved] = '\0';
-  char send_buffer[10];
+  char send_buffer[128];
   if(table[index].result == atoi(buf))
   {
     strcpy(send_buffer, "OK\n");
