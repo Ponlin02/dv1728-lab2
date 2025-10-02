@@ -15,7 +15,7 @@
 
 // Enable if you want debugging to be printed, see examble below.
 // Alternative, pass CFLAGS=-DDEBUG to make, make CFLAGS=-DDEBUG
-#define DEBUG
+//#define DEBUG
 #define MAXCLIENTS 200
 
 using namespace std;
@@ -107,7 +107,6 @@ int client_lockup(struct clientInfo *table, struct sockaddr_storage *addr, sockl
     if(!table[i].active)
     {
       memset(&table[i], 0, sizeof(clientInfo));
-      //table[i].addr = *addr;
       memcpy(&table[i].addr, addr, addr_len);
       table[i].addr_len = addr_len;
       table[i].last_seen = time(NULL);
@@ -204,7 +203,6 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
 {
   if(strstr(buf, "TEXT UDP 1.1") != NULL) //case text
   {
-    //buf[bytes_recieved] = '\0';
     char send_buffer[128];
     send_buffer[0] = '\0';
     sprintf(send_buffer, "%s %d %d\n", randomType(), randomInt() + 1, randomInt());
@@ -308,7 +306,6 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
 
 void text_response(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
-  //buf[bytes_recieved] = '\0';
   char send_buffer[128];
   send_buffer[0] = '\0';
   if(table[index].result == atoi(buf))
