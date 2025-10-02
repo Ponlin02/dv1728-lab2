@@ -6,7 +6,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <netdb.h>
-//#include <signal.h>
 #include <time.h>
 #include "protocol.h"
 
