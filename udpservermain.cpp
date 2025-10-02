@@ -15,7 +15,7 @@
 
 // Enable if you want debugging to be printed, see examble below.
 // Alternative, pass CFLAGS=-DDEBUG to make, make CFLAGS=-DDEBUG
-//#define DEBUG
+#define DEBUG
 #define MAXCLIENTS 100
 
 using namespace std;
@@ -428,6 +428,7 @@ int main(int argc, char *argv[]){
     else if(select_status == 0)
     {
       //rerun loop to check for timeouts
+      //printf("Check for tomeouts...\n");
       continue;
     }
 
@@ -452,8 +453,8 @@ int main(int argc, char *argv[]){
       }
 
       #ifdef DEBUG
-      printf("Client Index = %d\n", index);
-      printf("Step: %d\n", client_table[index].step);
+      printf("Client Index = %d  Step: %d\n", index, client_table[index].step);
+      fflush(NULL);
       #endif
 
       client_table[index].last_seen = time(NULL);
