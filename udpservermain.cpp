@@ -187,6 +187,19 @@ bool serverSetup(int &sockfd, char *hoststring, char *portstring)
   return true;
 }
 
+void binary_error(int sockfd, struct clientInfo *table, int index)
+{
+  calcMessage msg;
+  memset(&msg, 0, sizeof(calcMessage));
+  msg.type = htons(2);
+  msg.message = htonl(2);
+  msg.protocol = htons(17);
+  msg.major_version = htons(1);
+  msg.minor_version = htons(1);
+
+  sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr*)&table[index].addr, table[index].addr_len);
+}
+
 void processInitialData(int sockfd, struct clientInfo *table, int index, char* buf, int bytes_recieved)
 {
   if(strstr(buf, "TEXT UDP 1.1") != NULL) //case text
@@ -241,6 +254,8 @@ void processInitialData(int sockfd, struct clientInfo *table, int index, char* b
       printf("major: %d\n", msg.major_version);
       printf("minor: %d\n", msg.minor_version);
       #endif
+
+      binary_error(sockfd, table, index);
       return;
     }
 
@@ -320,6 +335,7 @@ void binary_response(int sockfd, struct clientInfo *table, int index, char* buf,
     printf("NOT OK\n");
     printf("ERROR: WRONG SIZE OR INCORRECT PROTOCOL\n");
     table[index].active = false;
+    binary_error(sockfd, table, index);
     return;
   }
 
